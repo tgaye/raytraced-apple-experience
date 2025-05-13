@@ -1,0 +1,254 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raytraced Apple Experience</title>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.8.0/lib/p5.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #121212;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        #canvas-container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            position: relative;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            color: rgba(255, 255, 255, 0.6);
+            text-align: center;
+            width: 100%;
+            font-size: 14px;
+            pointer-events: none;
+            transition: opacity 2s;
+        }
+    </style>
+
+<base target="_self">
+
+
+    </head><body><div id="canvas-container"></div>
+    <div id="instructions">Move your cursor to explore the apple • Click to change lighting</div>
+
+    <script>
+        const sketch = (p) => {
+            let apple;
+            let lightPos;
+            let bgGradient;
+            let rotationSpeed = 0.005;
+            let autoRotate = true;
+            let lightColor;
+            let ambientColor;
+            let specularColor;
+            let lastMouseMove = 0;
+            let showInstructions = true;
+            let particles = [];
+            let maxParticles = 1000;
+            let particleLifetime = 120;
+
+            p.setup = () => {
+                let canvas = p.createCanvas(p.min(p.windowWidth, 1200), p.min(p.windowHeight, 800), p.WEBGL);
+                canvas.parent('canvas-container');
+                canvas.mouseClicked(changeLighting);
+                
+                // Initialize colors
+                lightColor = p.color(255, 240, 200);
+                ambientColor = p.color(50, 30, 20);
+                specularColor = p.color(255, 255, 255, 150);
+                
+                // Create background gradient
+                bgGradient = p.createGraphics(p.width, p.height);
+                drawGradientBackground(bgGradient);
+                
+                // Initial light position
+                lightPos = p.createVector(200, -200, 200);
+                
+                // Fade out instructions after delay
+                setTimeout(() => {
+                    showInstructions = false;
+                }, 5000);
+            };
+
+            function drawGradientBackground(g) {
+                let c1 = p.color(20, 10, 30);
+                let c2 = p.color(40, 20, 50);
+                for (let y = 0; y < g.height; y++) {
+                    let inter = p.map(y, 0, g.height, 0, 1);
+                    let c = p.lerpColor(c1, c2, inter);
+                    g.stroke(c);
+                    g.line(0, y, g.width, y);
+                }
+            }
+
+            p.draw = () => {
+                // Handle auto-rotation and interaction
+                if (autoRotate) {
+                    rotationSpeed = p.lerp(rotationSpeed, 0.005, 0.05);
+                } else {
+                    rotationSpeed = p.lerp(rotationSpeed, 0, 0.1);
+                }
+                
+                // Update light position based on mouse
+                if (p.mouseX !== 0 && p.mouseY !== 0) {
+                    let targetX = p.map(p.mouseX, 0, p.width, -300, 300);
+                    let targetY = p.map(p.mouseY, 0, p.height, -200, 200);
+                    lightPos.x = p.lerp(lightPos.x, targetX, 0.1);
+                    lightPos.y = p.lerp(lightPos.y, targetY, 0.1);
+                    lastMouseMove = p.millis();
+                    
+                    if (showInstructions && p.millis() - lastMouseMove > 3000) {
+                        showInstructions = false;
+                    }
+                }
+                
+                // Draw background
+                p.image(bgGradient, -p.width/2, -p.height/2, p.width, p.height);
+                
+                // Set up lighting
+                p.ambientLight(p.red(ambientColor), p.green(ambientColor), p.blue(ambientColor));
+                p.pointLight(p.red(lightColor), p.green(lightColor), p.blue(lightColor), lightPos.x, lightPos.y, lightPos.z);
+                
+                // Draw apple
+                p.push();
+                p.rotateY(p.frameCount * rotationSpeed);
+                drawApple();
+                p.pop();
+                
+                // Update and draw particles
+                updateParticles();
+                drawParticles();
+                
+                // Draw instructions if needed
+                if (showInstructions) {
+                    p.push();
+                    p.fill(255, 255, 255, p.map(p.millis(), 0, 5000, 255, 0));
+                    p.textSize(16);
+                    p.textAlign(p.CENTER);
+                    p.text("Move your cursor to explore the apple • Click to change lighting", 0, p.height/2 - 50);
+                    p.pop();
+                }
+            };
+
+            function drawApple() {
+                // Main apple body
+                p.push();
+                p.specularMaterial(180, 30, 30);
+                p.shininess(50);
+                p.noStroke();
+                p.sphere(150, 64, 64);
+                p.pop();
+                
+                // Stem
+                p.push();
+                p.translate(0, -160, 0);
+                p.rotateZ(p.PI/6);
+                p.specularMaterial(80, 60, 40);
+                p.cylinder(10, 60, 8, 1);
+                p.pop();
+                
+                // Highlight effect
+                p.push();
+                p.specularMaterial(specularColor);
+                p.emissiveMaterial(specularColor);
+                p.translate(-50, -80, 150);
+                p.sphere(20, 16, 16);
+                p.pop();
+                
+                // Create occasional particles
+                if (p.frameCount % 5 === 0 && particles.length < maxParticles) {
+                    let pos = p.createVector(
+                        p.random(-100, 100),
+                        p.random(-100, 100),
+                        p.random(-100, 100)
+                    );
+                    particles.push({
+                        pos: pos,
+                        vel: p5.Vector.random3D().mult(0.5),
+                        life: particleLifetime,
+                        size: p.random(2, 5),
+                        color: p.color(255, p.random(100, 200), p.random(50, 100), p.random(50, 100))
+                    });
+                }
+            }
+
+            function updateParticles() {
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    particles[i].pos.add(particles[i].vel);
+                    particles[i].life--;
+                    particles[i].vel.mult(0.98);
+                    
+                    if (particles[i].life <= 0) {
+                        particles.splice(i, 1);
+                    }
+                }
+            }
+
+            function drawParticles() {
+                p.push();
+                p.rotateY(p.frameCount * rotationSpeed);
+                for (let part of particles) {
+                    p.push();
+                    p.translate(part.pos.x, part.pos.y, part.pos.z);
+                    p.noStroke();
+                    p.fill(part.color);
+                    p.sphere(part.size);
+                    p.pop();
+                }
+                p.pop();
+            }
+
+            function changeLighting() {
+                // Change light color
+                let hue = p.random(360);
+                lightColor = p.color(p.random(200, 255), p.random(200, 255), p.random(150, 255));
+                ambientColor = p.color(p.random(20, 50), p.random(10, 30), p.random(10, 20));
+                specularColor = p.color(p.random(200, 255), p.random(200, 255), p.random(200, 255), p.random(100, 200));
+                
+                // Create particle burst
+                for (let i = 0; i < 50 && particles.length < maxParticles; i++) {
+                    particles.push({
+                        pos: p.createVector(0, 0, 0),
+                        vel: p5.Vector.random3D().mult(p.random(2, 5)),
+                        life: particleLifetime,
+                        size: p.random(3, 8),
+                        color: p.color(p.red(lightColor), p.green(lightColor), p.blue(lightColor), p.random(100, 200))
+                    });
+                }
+            }
+
+            p.mouseMoved = () => {
+                autoRotate = false;
+                showInstructions = true;
+                lastMouseMove = p.millis();
+            };
+
+            p.mouseOut = () => {
+                autoRotate = true;
+            };
+
+            p.windowResized = () => {
+                p.resizeCanvas(p.min(p.windowWidth, 1200), p.min(p.windowHeight, 800));
+                bgGradient = p.createGraphics(p.width, p.height);
+                drawGradientBackground(bgGradient);
+            };
+        };
+
+        new p5(sketch);
+    </script>
+
+              
+          
+                
+          
+              
+</body></html>
